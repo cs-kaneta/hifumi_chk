@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>現場の非不未チェックリスト</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans JP', sans-serif;
+      background-color: #f7f9fb;
+    }
+    .category-box { transition: transform 0.3s, box-shadow 0.3s; }
+    .category-box:hover { transform: translateY(-4px); box-shadow: 0 10px 15px rgba(0,0,0,0.1); }
+    .item-list label:hover { background-color: #eef2ff; }
+    .item-list input[type="checkbox"]:checked + span { font-weight: 700; color: #1f2937; }
+    @keyframes pulse { 0%,100%{opacity:1;}50%{opacity:.5;} }
+    .animate-pulse { animation: pulse 1s cubic-bezier(0.4,0,0.6,1) infinite; }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'non-color': '#ef4444',
+            'fu-color': '#f59e0b',
+            'mi-color': '#3b82f6',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="p-4 sm:p-8">
+
+  <div class="max-w-6xl mx-auto">
+    <h1 class="text-3xl sm:text-4xl font-bold text-center text-gray-800 mb-6 border-b-4 border-indigo-200 pb-3">
+      🚨 現場の非不未チェックリスト 🚨
+    </h1>
+
+    <!-- スコア＆メーター -->
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-6 mb-8">
+      <div id="scoreDisplay" class="text-center p-4 rounded-xl border-2 transition-all duration-300 shadow-lg bg-white border-indigo-300 w-full sm:w-1/2"></div>
+      <div class="relative w-48 h-48 sm:w-56 sm:h-56 bg-white rounded-full shadow-lg flex items-center justify-center">
+        <canvas id="progressChart" width="180" height="180"></canvas>
+        <div id="chartLabel"
+             class="absolute inset-0 flex items-center justify-center text-3xl font-extrabold text-indigo-700">
+          0%
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="checklist-container"></div>
+  </div>
+
+  <script>
+    const checklistData = {
+      "非 (Non)": {
+        items: [
+          "非効率（作業フローが無駄に多い）","非自動化（手作業で実施している）","非共有（ナレッジが属人化）","非標準化（プロジェクトごとにルールが違う）",
+          "非文書化（ドキュメントが残っていない）","非統一（命名規則・フォーマットが揃っていない）","非追跡（変更履歴やログが残っていない）",
+          "非最適化（リソースが無駄に使われている）","非検証（レビュー・テストが不十分）","非連携（チーム間で情報共有されていない）"
+        ],
+        color: "non-color"
+      },
+      "不 (Fu)": {
+        items: [
+          "不便（システムやツールが使いづらい）","不透明（メンバーの作業状況やコストが見えない）","不統一（ルールやフォーマットがバラバラ）",
+          "不十分（テストやレビューが足りない）","不要（ムダの多い手順）","不親切（UIやドキュメントが不親切）","不遵守（規約やルールが守られていない）",
+          "不正確（要件定義やデータに誤り）","不明瞭（要件や仕様があいまい）","不公平（タスク分担が偏る）"
+        ],
+        color: "fu-color"
+      },
+      "未 (Mi)": {
+        items: [
+          "未整備（ドキュメントやプロセスが整っていない）","未教育（新技術のトレーニング未実施）","未経験（担当者が新しい領域に未経験）",
+          "未解決（バグや課題が放置）","未レビュー（レビュー体制が整っていない）","未報告（ホウレンソウがあまい）","未達成（プロジェクト目標や未達）",
+          "未展開（ツールや改善策が全社に広がっていない）","未完了（プロジェクト完了時に振り返りしていない）","未更新（ソフトやライブラリが古いまま）"
+        ],
+        color: "mi-color"
+      }
+    };
+
+    const container = document.getElementById('checklist-container');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const chartLabel = document.getElementById('chartLabel');
+    const TARGET_COUNT = 5; // ✅ 5チェックで100%
+    let chart;
+
+    function updateScoreDisplay(count) {
+      let message, colorClass, icon;
+      let dynamicClass = "shadow-lg bg-white border-indigo-300";
+      const cappedCount = Math.min(count, TARGET_COUNT);
+      const percent = Math.round((cappedCount / TARGET_COUNT) * 100);
+
+      if (count === 0) {
+        message = "まずは現場をチェックしてみましょう！";
+        icon = "🔍"; colorClass = "text-gray-500";
+      } else if (percent < 100) {
+        message = `あと ${TARGET_COUNT - cappedCount} 個見つけると・・・`;
+        icon = "🌱"; colorClass = "text-yellow-600";
+      } else {
+        message = "🔥 発掘完了！あなたの現場はヒフミの宝庫です！✨";
+        icon = "💰"; colorClass = "text-red-600 font-bold";
+        dynamicClass = "shadow-2xl bg-yellow-100 border-yellow-500 animate-pulse";
+      }
+
+      scoreDisplay.className = `text-center p-4 rounded-xl border-2 transition-all duration-300 ${dynamicClass}`;
+      scoreDisplay.innerHTML = `
+        <div class="text-3xl font-extrabold mb-2 ${colorClass}">
+          ヒフミメーター: ${percent}% ${icon}
+        </div>
+        <p class="text-sm sm:text-lg text-gray-700">${message}</p>
+      `;
+      animateNumber(percent);
+    }
+
+    function renderChecklist() {
+      container.innerHTML = '';
+
+      for (const category in checklistData) {
+        const data = checklistData[category];
+        const box = document.createElement('div');
+        box.className = `category-box bg-white p-5 rounded-xl shadow-md border-l-4 border-${data.color}`;
+
+        const title = document.createElement('h2');
+        title.className = `text-2xl font-bold mb-4 pb-2 border-b text-${data.color}`;
+        title.textContent = category;
+        box.appendChild(title);
+
+        const ul = document.createElement('ul');
+        ul.className = 'item-list space-y-2';
+
+        data.items.forEach((item, i) => {
+          const id = `${category.replace(/\s/g,'')}_${i}`;
+          const label = document.createElement('label');
+          label.className = 'flex items-start p-2 rounded-lg cursor-pointer';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.id = id;
+          checkbox.className = 'mt-1 mr-3 h-5 w-5 rounded-md border-gray-300 text-indigo-600 focus:ring-indigo-500';
+
+          checkbox.addEventListener('change', () => {
+            const count = document.querySelectorAll('input[type="checkbox"]:checked').length;
+            updateScoreDisplay(count);
+            updateChart(count);
+          });
+
+          const span = document.createElement('span');
+          span.textContent = item;
+          span.className = 'text-gray-700 text-base leading-snug';
+          label.appendChild(checkbox);
+          label.appendChild(span);
+          ul.appendChild(label);
+        });
+
+        box.appendChild(ul);
+        container.appendChild(box);
+      }
+
+      updateScoreDisplay(0);
+      initChart(0);
+    }
+
+    function initChart(count) {
+      const ctx = document.getElementById('progressChart').getContext('2d');
+      const cappedCount = Math.min(count, TARGET_COUNT);
+      const percent = (cappedCount / TARGET_COUNT) * 100;
+      chart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          datasets: [{
+            data: [percent, 100 - percent],
+            backgroundColor: ['#3b82f6', '#e5e7eb'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          cutout: '70%',
+          plugins: { legend: { display: false }, tooltip: { enabled: false } }
+        }
+      });
+    }
+
+	function updateChart(count) {
+	  const cappedCount = Math.min(count, TARGET_COUNT);
+	  const percent = (cappedCount / TARGET_COUNT) * 100;
+
+	  // 色の決定
+	  let fillColor;
+	  if (percent < 40) {
+	    fillColor = '#3b82f6'; // 青
+	  } else if (percent < 80) {
+	    fillColor = '#f59e0b'; // 黄
+	  } else {
+	    fillColor = '#ef4444'; // 赤
+	  }
+
+	  chart.data.datasets[0].data = [percent, 100 - percent];
+	  chart.data.datasets[0].backgroundColor = [fillColor, '#e5e7eb']; // 後半は灰色
+	  chart.update();
+
+	  animateNumber(percent);
+	}
+
+    function animateNumber(target) {
+      let start = parseInt(chartLabel.textContent) || 0;
+      const duration = 400;
+      const startTime = performance.now();
+
+      function step(now) {
+        const progress = Math.min((now - startTime) / duration, 1);
+        const value = Math.floor(start + (target - start) * progress);
+        chartLabel.textContent = `${value}%`;
+        if (progress < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    document.addEventListener('DOMContentLoaded', renderChecklist);
+  </script>
+</body>
+</html>
